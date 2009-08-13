@@ -310,6 +310,15 @@ def test_multi_convolutional_feature_map_fprop():
     mfmap_out = mfmap.fprop([inputs1, inputs2])
     assert_array_almost_equal(control, mfmap_out)
 
+def test_multi_convolutional_feature_map_bprop():
+    mfmap = MultiConvolutionalFeatureMap((5, 5), (20,20), 2)
+    inputs1 = random.normal(size=(20, 20))
+    inputs2 = random.normal(size=(20, 20))
+    inputs = [inputs1, inputs2]
+    func1 = lambda in1: mfmap.fprop((in1.reshape((20, 20)), inputs2)).sum()
+    grad1 = lambda in1: mfmap.bprop((in1))[0].reshape(400)
+
+
 class ConvolutionalPlaneExceptionsTester(TestCase):
     def setUp(self):
         self._moduleclass = ConvolutionalPlane
