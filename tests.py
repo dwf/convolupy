@@ -311,13 +311,28 @@ def test_multi_convolutional_feature_map_fprop():
     assert_array_almost_equal(control, mfmap_out)
 
 def test_multi_convolutional_feature_map_bprop():
-    mfmap = MultiConvolutionalFeatureMap((5, 5), (20,20), 2)
-    inputs1 = random.normal(size=(20, 20))
-    inputs2 = random.normal(size=(20, 20))
-    inputs = [inputs1, inputs2]
-    func1 = lambda in1: mfmap.fprop((in1.reshape((20, 20)), inputs2)).sum()
-    grad1 = lambda in1: mfmap.bprop((in1))[0].reshape(400)
-
+    size = (20, 20)
+    elems = np.prod(size)
+    fsize = (5, 5)
+    osize = (16, 16)
+    mfmap = MultiConvolutionalFeatureMap(fsize, size, 2)
+    mfmap.initialize()
+    in1 = random.normal(size=size)
+    in2 = random.normal(size=size)
+    inputs = (in1, in2)
+    dout = np.ones(osize)
+    bprop = lambda inp: mfmap.bprop(dout, inp)
+    grad1 = lambda var: bprop((var.reshape(size), in2))[0].reshape(elems)
+    grad2 = lambda var: bprop((in1, var.reshape(size)))[1].reshape(elems)
+    func1 = lambda var: mfmap.fprop((var.reshape(size), in2)).sum()
+    func2 = lambda var: mfmap.fprop((in1, var.reshape(size))).sum()
+    varied_input = random.normal(size=size)
+    fd_grad1 = fd_grad(func1, varied_input.reshape(elems), 1e-4)
+    real_grad1 = grad1(varied_input)
+    assert_array_almost_equal(fd_grad1, real_grad1)
+    fd_grad2 = fd_grad(func2, varied_input.reshape(elems), 1e-4)
+    real_grad2 = grad2(varied_input)
+    assert_array_almost_equal(fd_grad2, real_grad2)
 
 class ConvolutionalPlaneExceptionsTester(TestCase):
     def setUp(self):

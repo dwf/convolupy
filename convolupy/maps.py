@@ -297,7 +297,7 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
         Backpropagate derivatives through this module to get derivatives
         with respect to this module's input.
         """
-        derivs = [self._squash_derivatives(dout, inp) for inp in inputs]
+        derivs = self._squash_derivatives(dout, inputs)
         triples = izip(self.planes, derivs, inputs)
         return [plane.bprop(deriv, inp) for plane, deriv, inp in triples]
     
@@ -310,10 +310,10 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
                 (will be size of input - size of filter + 1, elementwise)
             * inputs -- inputs to this module
         """
-        deriv = self._squash_derivatives(dout, inputs)
-        pairs = izip(self.planes, inputs)
-        return [plane.grad(deriv, inp) for plane, inp in pairs]
-    
+        derivs = self._squash_derivatives(dout, inputs)
+        planegrads = [plane.grad(deriv, inp) for plane, deriv, inp in triples]
+        super(MultiConvolutionalFeatureMap, self).grad(dout)
+     
     def initialize(self, multiplier=1):
         """Initialize the parameters in this module."""
         for plane in self.planes:
@@ -326,8 +326,8 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
         derivatives of the activations (convolved values) with respect to 
         the outputs of the nonlinearity.
         """
-        convol = self.fprop(inputs)
-        deriv = super(MultiConvolutionalFeatureMap, self).bprop(dout, convol)
+        sig_inp = self._add_up(inputs)
+        deriv = super(MultiConvolutionalFeatureMap, self).bprop(dout, sig_inp)
         return deriv
     
     def _add_up(self, inputs):
@@ -337,8 +337,10 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
         """
         outputs = [pln.fprop(inp) for pln, inp in izip(self.planes, inputs)]
         out = self._out_array
-        out[...] = 0
+        out[...] = 0.
         for convolved in outputs:
             self._out_array += convolved
-   
+        return self._out_array
+    
+    
 
