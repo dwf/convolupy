@@ -283,8 +283,8 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
         super(MultiConvolutionalFeatureMap, self).__init__(
             outsize,
             True,
-            params=self.params[0:1],
-            grad=self._grad[0:1]
+            params=self.params,  # This is a bit of a kludge.
+            grad=self._grad
         )
     
     def fprop(self, inputs):
@@ -311,17 +311,26 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
                 (will be size of input - size of filter + 1, elementwise)
             * inputs -- inputs to this module
         """
-        derivs = self._squash_derivatives(dout, inputs)
-        planegrads = [plane.grad(deriv, inp) for plane, deriv, inp in triples]
-        super(MultiConvolutionalFeatureMap, self).grad(dout)
-     
+        deriv, sig_inp = self._squash_derivatives(dout, inputs, True)
+        
+        # Since the gradient arrays for all of these planes are
+        # subarrays of self._grad we don't actually need to return
+        # this; just make the method calls.
+        planegrads = [plane.grad(deriv, inp) for plane, inp in
+                      izip(self.planes, inputs)]
+
+        # Compute the bias gradient, which should be stored in
+        # self._grad[0]
+        super(MultiConvolutionalFeatureMap, self).grad(dout, sig_inp)
+        return self._grad
+    
     def initialize(self, multiplier=1):
         """Initialize the parameters in this module."""
         for plane in self.planes:
             plane.initialize(multiplier * len(self.planes), True)
         super(MultiConvolutionalFeatureMap, self).initialize()
     
-    def _squash_derivatives(self, dout, inputs):
+    def _squash_derivatives(self, dout, inputs, return_sig_inp=False):
         """
         Do the first step in either grad or bprop, which is to get
         derivatives of the activations (convolved values) with respect to 
@@ -329,7 +338,10 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
         """
         sig_inp = self._add_up(inputs)
         deriv = super(MultiConvolutionalFeatureMap, self).bprop(dout, sig_inp)
-        return deriv
+        if return_sig_inp:
+            return deriv, sig_inp
+        else:
+            return deriv
     
     def _add_up(self, inputs):
         """

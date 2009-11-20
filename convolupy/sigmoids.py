@@ -48,7 +48,7 @@ class TanhSigmoid(BaseBPropComponent):
         else:
             self.params = None
             self._grad = None
-        self.bias = self.params
+        self.bias = self.params if self.params is None else self.params[0:1]
     
     def initialize(self, fan_in=None):
         """Initialize the bias parameter."""
@@ -98,7 +98,9 @@ class TanhSigmoid(BaseBPropComponent):
             * inputs -- inputs to this module
         """
         if self._grad is not None:
-            self._grad[0] = self.bprop(dout, inputs).sum()
+            # Dispatch this specifically to the TanhSigmoid class so that
+            # it doesn't call overridden bprop's.
+            self._grad[0] = TanhSigmoid.bprop(self, dout, inputs).sum()
         return self._grad
     
 
