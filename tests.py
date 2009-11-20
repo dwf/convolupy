@@ -310,29 +310,47 @@ def test_multi_convolutional_feature_map_fprop():
     mfmap_out = mfmap.fprop([inputs1, inputs2])
     assert_array_almost_equal(control, mfmap_out)
 
-def test_multi_convolutional_feature_map_bprop():
+def test_multi_convolutional_feature_map_singleplane_bprop():
+    size = (20, 20)
+    elems = np.prod(size)
+    fsize = (5, 5)
+    osize = (16, 16)
+    mfmap = MultiConvolutionalFeatureMap(fsize, size, 1)
+    mfmap.initialize()
+    in1 = random.normal(size=size)
+    dout = np.ones(osize)
+    bprop = lambda inp: mfmap.bprop(dout, inp)
+    grad1 = lambda var: bprop((var.reshape(size),))[0].reshape(elems)
+    func1 = lambda var: mfmap.fprop((var.reshape(size),)).sum()
+    varied_input = random.normal(size=size)
+    fd_grad1 = fd_grad(func1, varied_input.reshape(elems), 1e-4)
+    real_grad1 = grad1(varied_input)
+    assert_array_almost_equal(fd_grad1, real_grad1)
+
+def test_multi_convolutional_feature_map_twoplane_bprop():
     size = (20, 20)
     elems = np.prod(size)
     fsize = (5, 5)
     osize = (16, 16)
     mfmap = MultiConvolutionalFeatureMap(fsize, size, 2)
     mfmap.initialize()
-    in1 = random.normal(size=size)
-    in2 = random.normal(size=size)
-    inputs = (in1, in2)
+    
+    inp = random.normal(size=size)
+    cnst = random.normal(size=size)
+
     dout = np.ones(osize)
-    bprop = lambda inp: mfmap.bprop(dout, inp)
-    grad1 = lambda var: bprop((var.reshape(size), in2))[0].reshape(elems)
-    grad2 = lambda var: bprop((in1, var.reshape(size)))[1].reshape(elems)
-    func1 = lambda var: mfmap.fprop((var.reshape(size), in2)).sum()
-    func2 = lambda var: mfmap.fprop((in1, var.reshape(size))).sum()
-    varied_input = random.normal(size=size)
-    fd_grad1 = fd_grad(func1, varied_input.reshape(elems), 1e-4)
-    real_grad1 = grad1(varied_input)
-    assert_array_almost_equal(fd_grad1, real_grad1)
-    fd_grad2 = fd_grad(func2, varied_input.reshape(elems), 1e-4)
-    real_grad2 = grad2(varied_input)
-    assert_array_almost_equal(fd_grad2, real_grad2)
+
+    fprop = lambda y: mfmap.fprop((y.reshape(size), cnst)).sum()
+    approximate = fd_grad(fprop, inp.reshape(400))
+    actual = mfmap.bprop(np.ones(osize), (inp, cnst))[0].reshape(400)
+    assert_array_almost_equal(approximate, actual)
+
+    # Swap the order - should make no difference
+    fprop = lambda y: mfmap.fprop((cnst, y.reshape(size))).sum()
+    approximate = fd_grad(fprop, inp.reshape(400))
+    actual = mfmap.bprop(np.ones(osize), (cnst, inp))[1].reshape(400)
+    assert_array_almost_equal(approximate, actual)
+
 
 class ConvolutionalPlaneExceptionsTester(TestCase):
     def setUp(self):
