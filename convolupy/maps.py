@@ -297,7 +297,8 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
         Backpropagate derivatives through this module to get derivatives
         with respect to this module's input.
         """
-        derivs = self._squash_derivatives(dout, inputs)
+        deriv = self._squash_derivatives(dout, inputs)
+        derivs = [deriv] * len(self.planes)
         triples = izip(self.planes, derivs, inputs)
         return [plane.bprop(deriv, inp) for plane, deriv, inp in triples]
     
@@ -341,6 +342,5 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
         for convolved in outputs:
             self._out_array += convolved
         return self._out_array
-    
     
 
