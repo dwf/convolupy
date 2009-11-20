@@ -303,7 +303,7 @@ def test_multi_convolutional_feature_map_fprop():
     mfmap.initialize()
     cplane1.params[:] = mfmap.planes[0].params
     cplane2.params[:] = mfmap.planes[1].params
-    sigmoid.params[:] = mfmap.params
+    sigmoid.params[:] = mfmap.params[0:1]
     inputs1 = random.normal(size=(20, 20))
     inputs2 = random.normal(size=(20, 20))
     control = sigmoid.fprop(cplane1.fprop(inputs1) + cplane2.fprop(inputs2))
@@ -341,16 +341,58 @@ def test_multi_convolutional_feature_map_twoplane_bprop():
     dout = np.ones(osize)
 
     fprop = lambda y: mfmap.fprop((y.reshape(size), cnst)).sum()
-    approximate = fd_grad(fprop, inp.reshape(400))
-    actual = mfmap.bprop(np.ones(osize), (inp, cnst))[0].reshape(400)
+    approximate = fd_grad(fprop, inp.reshape(elems))
+    actual = mfmap.bprop(np.ones(osize), (inp, cnst))[0].reshape(elems)
     assert_array_almost_equal(approximate, actual)
 
     # Swap the order - should make no difference
     fprop = lambda y: mfmap.fprop((cnst, y.reshape(size))).sum()
-    approximate = fd_grad(fprop, inp.reshape(400))
-    actual = mfmap.bprop(np.ones(osize), (cnst, inp))[1].reshape(400)
+    approximate = fd_grad(fprop, inp.reshape(elems))
+    actual = mfmap.bprop(np.ones(osize), (cnst, inp))[1].reshape(elems)
     assert_array_almost_equal(approximate, actual)
 
+def test_multi_convolutional_feature_map_twoplane_params():
+    size = (20, 20)
+    elems = np.prod(size)
+    fsize = (5, 5)
+    osize = (16, 16)
+    mfmap = MultiConvolutionalFeatureMap(fsize, size, 2)
+    mfmap.initialize()
+
+    inp1 = random.normal(size=size)
+    inp2 = random.normal(size=size)
+    
+    dout = np.ones(osize)
+
+    def fprop_params1(params):
+        mfmap.planes[0].params[:] = params
+        return mfmap.fprop((inp1, inp2)).sum()
+
+    def fprop_params2(params):
+        mfmap.planes[1].params[:] = params
+        return mfmap.fprop((inp1, inp2)).sum()
+
+    def fprop_bias_adjust(params):
+        mfmap.params[0:1] = params
+        return mfmap.fprop((inp1, inp2)).sum()
+    
+    # Reset the parameters after we calculate each gradient approximation.
+    resetparams = mfmap.params.copy()
+    params1 = mfmap.planes[0].params
+    params2 = mfmap.planes[1].params
+    paramsb = mfmap.params[0:1]
+
+    real = mfmap.grad(dout, (inp1, inp2))
+    
+    approxb = fd_grad(fprop_bias_adjust, paramsb.copy(), 1e-4)
+    mfmap.params[:] = resetparams
+    approx1 = fd_grad(fprop_params1, params1.copy(), 1e-4)
+    mfmap.params[:] = resetparams
+    approx2 = fd_grad(fprop_params2, params2.copy(), 1e-4)
+    
+    all_approx = np.concatenate((approxb, approx1, approx2))
+    
+    assert_array_almost_equal(real, all_approx)
 
 class ConvolutionalPlaneExceptionsTester(TestCase):
     def setUp(self):
