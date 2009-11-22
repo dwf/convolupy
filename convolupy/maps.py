@@ -85,7 +85,7 @@ class ConvolutionalFeatureMap(ConvolutionalPlane):
     
     Uses a tied bias for every unit in the feature map.
     """
-    def __init__(self, fsize, imsize, params=None, 
+    def __init__(self, fsize, imsize, params=None, grad=None, 
                  inner=TANH_INNER, outer=TANH_OUTER):
         """
         Initialize the feature map.
@@ -101,7 +101,12 @@ class ConvolutionalFeatureMap(ConvolutionalPlane):
                          and after the squashing function is applied,
                          respectively.
         """
-        super(ConvolutionalFeatureMap, self).__init__(fsize, imsize, params)
+        super(ConvolutionalFeatureMap, self).__init__(
+            fsize, 
+            imsize, 
+            params=params,
+            grad=grad
+        )
         self.inner = inner
         self.outer = outer
         self._outer_times_inner = outer * inner
@@ -164,16 +169,21 @@ class AveragePoolingFeatureMap(AveragePoolingPlane):
     averaging disjoint neighbourhoods, applies the weight 
     and bias and finally a sigmoid function.
     """
-    def __init__(self, ratio, imsize, inner=TANH_INNER, outer=TANH_OUTER):
-        super(AveragePoolingFeatureMap, self).__init__(ratio, imsize)
-        self.params = np.empty((2,))
+    def __init__(self, ratio, imsize, params=None, grad=None,
+                 inner=TANH_INNER, outer=TANH_OUTER):
+        super(AveragePoolingFeatureMap, self).__init__(
+            ratio,
+            imsize,
+            nparams=2, # Trigger the creation of params & grad if necessary
+            params=params,
+            grad=grad
+        )
         self.weights = self.params[:1]
         self.biases = self.params[1:]
         self.inner = inner
         self.outer = outer
         self._outer_times_inner = outer * inner
-        self._grad = np.empty(len(self.params))
-    
+
     def fprop(self, inputs):
         """Forward propagate input through this module."""
         outputs = super(AveragePoolingFeatureMap, self).fprop(inputs)
@@ -252,8 +262,8 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
     summed together and globally biased before being squashed by 
     a sigmoid nonlinearity.
     """
-    def __init__(self, fsize, imsize, num, inner=TANH_INNER, 
-                 outer=TANH_OUTER):
+    def __init__(self, fsize, imsize, num, params=None, grad=None, 
+                 inner=TANH_INNER, outer=TANH_OUTER):
         """
         Construct a MultiConvolutionalFeatureMap.
         
@@ -263,8 +273,18 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
         """
         # Filter size times the number of filters, plus a bias
         filter_elems = np.prod(fsize)
-        self.params = np.empty(filter_elems * num + 1)
-        self._grad = np.empty(len(self.params))
+        nparams = filter_elems * num + 1
+        outsize = ConvolutionalPlane._output_from_im_and_filter_size(
+            imsize,
+            fsize
+        )
+        super(MultiConvolutionalFeatureMap, self).__init__(
+            outsize,
+            True,
+            nparams=nparams,
+            params=params,  # This is a bit of a kludge.
+            grad=grad
+        )
         self.planes = []
         assert num > 0
         for index in xrange(num):
@@ -278,14 +298,7 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
                 bias=False
             )
             self.planes.append(thisplane)
-        outsize = thisplane.outsize
         self._out_array = np.empty(outsize)
-        super(MultiConvolutionalFeatureMap, self).__init__(
-            outsize,
-            True,
-            params=self.params,  # This is a bit of a kludge.
-            grad=self._grad
-        )
     
     def fprop(self, inputs):
         """Forward propagate input through this module."""

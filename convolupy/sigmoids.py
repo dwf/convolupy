@@ -12,8 +12,8 @@ class TanhSigmoid(BaseBPropComponent):
     A backpropagation module that simply applies an elementwise
     sigmoid (hyperbolic tangent flavour).
     """
-    def __init__(self, size, bias=False, params=None, grad=None, 
-                inner=TANH_INNER, outer=TANH_OUTER):
+    def __init__(self, size, bias=False, nparams=None, params=None, 
+                 grad=None, inner=TANH_INNER, outer=TANH_OUTER):
         """
         Construct this learning module.
         
@@ -29,25 +29,17 @@ class TanhSigmoid(BaseBPropComponent):
                   into a single set of sigmoids and don't want each of those
                   linear layers learning a separate bias.
         """
-        super(TanhSigmoid, self).__init__()
+        if nparams is None:
+            nparams = 1 if bias else None
+        super(TanhSigmoid, self).__init__(
+            nparams=nparams, 
+            params=params, 
+            grad=grad
+        )
         self.inner = inner
         self.outer = outer
         self._out_array = np.empty(size)
         self._bprop_array = np.empty(size)
-        if bias:
-            if params is None:
-                self.params = np.empty((1,))
-            else:
-                # Error check this
-                self.params = params
-            if grad is None:
-                self._grad = np.empty((1,))
-            else:
-                # Error check this
-                self._grad = grad
-        else:
-            self.params = None
-            self._grad = None
         self.bias = self.params if self.params is None else self.params[0:1]
     
     def initialize(self, fan_in=None):

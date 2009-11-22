@@ -43,7 +43,6 @@ class ConvolutionalPlane(BaseBPropComponent):
         bias for every unit (it's unclear to me whether this would ever
         be a good idea).
         """
-        super(ConvolutionalPlane, self).__init__()
         odd = (num % 2 == 1 for num in fsize)
         if len(fsize) != 2 or not all(odd):
             raise ValueError('fsize must be length 2, both numbers odd')
@@ -63,33 +62,21 @@ class ConvolutionalPlane(BaseBPropComponent):
         else:
             bias_elems = 0
             bias_shape = 0
+
+        super(ConvolutionalPlane, self).__init__(
+            filter_elems + bias_elems, 
+            params,
+            grad
+        )
+
         # Oversized output array so we can use convolve() on it
         self._out_array = np.empty(imsize)
         self._bprop_array = np.empty(imsize)
-        
-        # Allocate room for the parameters of this layer
-        if params is None:
-            self.params = np.empty(filter_elems + bias_elems)
-        else:
-            if not hasattr(params, 'shape') or len(params.shape) > 1:
-                raise ValueError('params must be rank 1 if supplied')
-            elif params.size < filter_elems + bias_elems:
-                raise ValueError('params vector smaller than required (%d)' %
-                (filter_elems + bias_elems))
-            self.params = params
         
         # Views onto the filter and bias portion of the parameter vector
         self.filter = self.params[:filter_elems].reshape(fsize)
         self.biases = self.params[filter_elems:].reshape(bias_shape)
         
-        # For the gradients
-        if grad is None:
-            self._grad = np.empty(self.params.shape)
-        else:
-            # Error check
-            self._grad = grad
-        #self.initialize()
-    
     def fprop(self, inputs):
         """Forward propagate input through this module."""
         
@@ -226,12 +213,12 @@ class AveragePoolingPlane(BaseBPropComponent):
     A fixed module (no learnable parameters) that performs downsampling 
     by averaging in non-overlapping local neighbourhoods.
     """
-    def __init__(self, ratio, imsize):
+    def __init__(self, ratio, imsize, *args, **kwargs):
         """
         Construct an AveragePoolingPlane that downsamples an image of size
         imsize at the given subsampling ratio.
         """
-        super(AveragePoolingPlane, self).__init__()
+        super(AveragePoolingPlane, self).__init__(*args, **kwargs)
         if len(ratio) != 2 or len(imsize) != 2:
             raise ValueError('Both ratio and imsize must be length 2')
         elif any(dim_i % dim_r != 0 for dim_i, dim_r in izip(imsize, ratio)):

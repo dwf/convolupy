@@ -1,12 +1,38 @@
 """Base class for backpropagation components."""
 
+import numpy as np
+
 class BaseBPropComponent(object):
     """Base class for all back-propagatable components."""
-    def __init__(self):
+    def __init__(self, nparams=None, params=None, grad=None):
         """Dummy constructor. This class should never be instantiated."""
         # To satisfy pylint
         self._out_array = None
         self._bprop_array = None
+        
+        if params is None:
+            if nparams is not None:
+                self.params = np.empty((nparams,))
+            else:
+                self.params = None
+        else:
+            if not hasattr(params, 'shape') or params.ndim != 1:
+                raise ValueError('params must be rank 1 array if supplied')
+            elif params.size < nparams:
+                raise ValueError('params smaller than required (%d)' % nparams)
+            self.params = params
+
+        if grad is None:
+            if nparams is not None:
+                self._grad = np.empty((nparams,))
+            else:
+                self._grad = None
+        else:
+            if not hasattr(grad, 'shape') or grad.ndim != 1:
+                raise ValueError('grad must be rank 1 array if supplied')
+            elif grad.size < nparams:
+                raise ValueError('grad smaller than required (%d)' % nparams)
+            self._grad = grad
     
     @property
     def outsize(self):
