@@ -6,6 +6,7 @@ from numpy.testing.utils  import assert_array_almost_equal
 
 from nose.tools import raises
 
+from convolupy.base import BaseBPropComponent
 from convolupy.planes import ConvolutionalPlane, AveragePoolingPlane
 from convolupy.maps import NaiveConvolutionalFeatureMap
 from convolupy.maps import ConvolutionalFeatureMap, AveragePoolingFeatureMap
@@ -414,6 +415,21 @@ def test_multi_convolutional_feature_map_twoplane_params():
     
     assert_array_almost_equal(real, all_approx)
 
+class BaseBPropComponentExceptionsTester(TestCase):
+    def setUp(self):
+        self._moduleclass = BaseBPropComponent
+    
+    @raises(NotImplementedError)
+    def test_bprop_raises(self):
+        obj = self._moduleclass()
+        obj.bprop(np.array([[0]]), np.array([[0]]))
+
+    @raises(NotImplementedError)
+    def test_fprop_raises(self):
+        obj = self._moduleclass()
+        obj.fprop(np.array([[0]]))
+
+
 class ConvolutionalPlaneExceptionsTester(TestCase):
     def setUp(self):
         self._moduleclass = ConvolutionalPlane
@@ -461,12 +477,20 @@ class ConvolutionalPlaneExceptionsTester(TestCase):
     
     @raises(ValueError)
     def test_bad_params(self):
-        foo = self._moduleclass((5, 5), (6, 6), params=np.array([[4,5]]))
-    
-    @raises(ValueError)
-    def test_bad_params(self):
         foo = self._moduleclass((5, 5), (6, 6), params=np.zeros(25))
     
+    @raises(ValueError)
+    def test_bad_grad_scalar(self):
+        foo = self._moduleclass((5, 5), (6, 6), grad=5)
+    
+    @raises(ValueError)
+    def test_bad_grad_rank2(self):
+        foo = self._moduleclass((5, 5), (6, 6), grad=np.array([[4,5]]))
+    
+    @raises(ValueError)
+    def test_bad_grad(self):
+        foo = self._moduleclass((5, 5), (6, 6), grad=np.zeros(25))
+   
 
 class ConvolutionalFMapExceptionsTester(ConvolutionalPlaneExceptionsTester):
     def setUp(self):
@@ -491,4 +515,17 @@ class AveragePoolingPlaneExceptionsTester(TestCase):
     @raises(ValueError)
     def test_ratio_nondivisible(self):
         foo = AveragePoolingPlane((5, 5), (24, 24))
+
+    @raises(NotImplementedError)
+    def test_grad_raises_notimplemented(self):
+        foo = AveragePoolingPlane((5, 5), (25, 25))
+        foo.grad(np.empty((5, 5)), np.empty((25, 25)))
+
+def test_tostring():
+    cfm = ConvolutionalFeatureMap((5, 5), (20, 20))
+    apfm = AveragePoolingFeatureMap((5, 5), (20, 20))
+    assert str(cfm) == \
+            'ConvolutionalFeatureMap 20x20 => 16x16 (filtering @ 5x5)'
+    assert str(apfm) == \
+            'AveragePoolingFeatureMap 20x20 => 4x4 (downsampling @ 5x5)'
     
