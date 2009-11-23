@@ -1,3 +1,5 @@
+"""Modules that apply a nonlinear squashing function."""
+
 # NumPy/SciPy imports
 import numpy as np
 from numpy import random
@@ -12,8 +14,8 @@ class TanhSigmoid(BaseBPropComponent):
     A backpropagation module that simply applies an elementwise
     sigmoid (hyperbolic tangent flavour).
     """
-    def __init__(self, size, bias=False, nparams=None, params=None, 
-                 grad=None, inner=TANH_INNER, outer=TANH_OUTER):
+    def __init__(self, size, bias=False, nparams=None, 
+                 inner=TANH_INNER, outer=TANH_OUTER, **kwargs):
         """
         Construct this learning module.
         
@@ -33,8 +35,7 @@ class TanhSigmoid(BaseBPropComponent):
             nparams = 1 if bias else None
         super(TanhSigmoid, self).__init__(
             nparams=nparams, 
-            params=params, 
-            grad=grad
+            **kwargs
         )
         self.inner = inner
         self.outer = outer
