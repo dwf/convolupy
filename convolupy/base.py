@@ -44,10 +44,6 @@ class BaseBPropComponent(object):
         """Image input size."""
         return self._bprop_array.shape
     
-    def initialize(self, *args, **kwargs):
-        """Initialize the parameters in this module, if any."""
-        pass
-    
     def fprop(self, inputs):
         """Forward propagate input through this module."""
         ishp = 'x'.join(str(x) for x in inputs.shape)
@@ -88,5 +84,4 @@ class BaseBPropComponent(object):
         name = self.__class__.__name__
         resolution = 'x'.join(str(x) for x in self.imsize)
         return "%s instance @ %s" % (name, resolution) + aux
-    
 
