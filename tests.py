@@ -89,7 +89,8 @@ def test_input_gradients_basic():
     ]
     for module_class in module_classes:
         module = module_class((5, 5), (20, 20))
-        module.initialize()
+        if hasattr(module, 'initialize'):
+            module.initialize()
         inputs = random.normal(size=module.imsize)
         yield check_input_gradient, module, inputs
 
@@ -110,6 +111,23 @@ def test_parameter_gradients_basic():
         inputs = random.normal(size=module.imsize)
         params = random.normal(size=module.params.shape)
         yield check_parameter_gradient, module, inputs, params
+
+def test_convolutional_class_properties():
+    module_classes = [
+        ConvolutionalPlane, 
+        ConvolutionalFeatureMap,
+        NaiveConvolutionalFeatureMap
+    ]
+    for module_class in module_classes:
+        for fsize in [(3, 3), (5, 5), (7, 5), (5, 7)]:
+            obj = module_class(fsize, (105, 105))
+            assert obj.fsize == fsize
+        for imsize in [(10, 10), (40, 60), (640, 480)]:
+            obj = module_class((3, 3), imsize)
+            assert obj.imsize == imsize
+    obj = module_class((5, 5), (25, 35))
+    assert tuple(int(x) for x in obj.outsize) == (21, 31)
+
 
 def test_convolutional_plane_params_gradient_unit_bias():
     module = ConvolutionalPlane((5, 5), (20, 20), biastype='unit')
@@ -174,6 +192,8 @@ def test_convolutional_feature_map_agrees_with_naive_version_fprop():
     cmap = ConvolutionalFeatureMap((5, 5), (20, 20))
     cmap.initialize()
     cmap_naive = NaiveConvolutionalFeatureMap((5, 5), (20, 20))
+    assert cmap_naive.fsize == (5, 5)
+    assert cmap_naive.imsize == (20, 20)
     
     # Sync up their parameters
     cmap_naive.convolution.params[:] = cmap.params
