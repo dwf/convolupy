@@ -30,8 +30,7 @@ class ConvolutionalPlane(BaseBPropComponent):
     used directly in higher layers when several ConvolutionalPlanes
     might feed the input of a single sigmoidal feature map.
     """
-    def __init__(self, fsize, imsize, params=None, grad=None, 
-                 bias=True, biastype='map'):
+    def __init__(self, fsize, imsize, bias=True, biastype='map', **kwargs):
         """
         Initialize a convolutional plane for an image of size 'imsize'
         with convolutional filter of size fsize.
@@ -49,7 +48,7 @@ class ConvolutionalPlane(BaseBPropComponent):
         
         # Parameters for this layer and views onto them
         filter_elems = np.prod(fsize)
-        outsize = self._output_from_im_and_filter_size(imsize, fsize)
+        outsize = self.outsize_from_imsize_and_fsize(imsize, fsize)
         if bias:
             if biastype == 'map':
                 bias_elems = 1
@@ -65,8 +64,7 @@ class ConvolutionalPlane(BaseBPropComponent):
 
         super(ConvolutionalPlane, self).__init__(
             filter_elems + bias_elems, 
-            params,
-            grad
+            **kwargs
         )
 
         # Oversized output array so we can use convolve() on it
@@ -132,7 +130,7 @@ class ConvolutionalPlane(BaseBPropComponent):
         """Output size."""
         imsize = self._out_array.shape
         fsize = self.filter.shape
-        return self._output_from_im_and_filter_size(imsize, fsize)
+        return self.outsize_from_imsize_and_fsize(imsize, fsize)
     
     @property
     def fsize(self):
@@ -173,7 +171,7 @@ class ConvolutionalPlane(BaseBPropComponent):
         return [np.floor(dim / 2) for dim in fsize]
     
     @classmethod
-    def _output_from_im_and_filter_size(cls, imsize, fsize):
+    def outsize_from_imsize_and_fsize(cls, imsize, fsize):
         """Given image size and filter size, calculate size of the output."""
         offsets = cls._offsets_from_filter_size(fsize)
         return [size - 2 * off for off, size in izip(offsets, imsize)]
@@ -256,4 +254,3 @@ class AveragePoolingPlane(BaseBPropComponent):
                 self._bprop_array[..., rstart::rstr, cstart::cstr] = dout
         self._bprop_array /= np.prod(self.ratio)
         return self._bprop_array
-
