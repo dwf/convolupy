@@ -66,14 +66,17 @@ class NaiveConvolutionalFeatureMap(BaseBPropComponent):
         """Initialize the module's weights."""
         self.convolution.initialize()
     
+    @property
     def outsize(self):
         """Output size."""
-        return self.convolution.outsize()
+        return self.convolution.outsize
     
+    @property
     def imsize(self):
         """Image input size."""
-        return self.convolution.imsize()
+        return self.convolution.imsize
     
+    @property
     def fsize(self):
         """Filter shape."""
         return self.convolution.filter.shape
@@ -85,8 +88,8 @@ class ConvolutionalFeatureMap(ConvolutionalPlane):
     
     Uses a tied bias for every unit in the feature map.
     """
-    def __init__(self, fsize, imsize, params=None, grad=None, 
-                 inner=TANH_INNER, outer=TANH_OUTER):
+    def __init__(self, fsize, imsize, inner=TANH_INNER, outer=TANH_OUTER,
+                 **kwargs):
         """
         Initialize the feature map.
         
@@ -104,8 +107,7 @@ class ConvolutionalFeatureMap(ConvolutionalPlane):
         super(ConvolutionalFeatureMap, self).__init__(
             fsize, 
             imsize, 
-            params=params,
-            grad=grad
+            **kwargs
         )
         self.inner = inner
         self.outer = outer
@@ -169,14 +171,15 @@ class AveragePoolingFeatureMap(AveragePoolingPlane):
     averaging disjoint neighbourhoods, applies the weight 
     and bias and finally a sigmoid function.
     """
-    def __init__(self, ratio, imsize, params=None, grad=None,
-                 inner=TANH_INNER, outer=TANH_OUTER):
+    def __init__(self, ratio, imsize,
+                 inner=TANH_INNER, outer=TANH_OUTER,
+                 **kwargs):
+        
         super(AveragePoolingFeatureMap, self).__init__(
             ratio,
             imsize,
             nparams=2, # Trigger the creation of params & grad if necessary
-            params=params,
-            grad=grad
+            **kwargs
         )
         self.weights = self.params[:1]
         self.biases = self.params[1:]
@@ -262,8 +265,8 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
     summed together and globally biased before being squashed by 
     a sigmoid nonlinearity.
     """
-    def __init__(self, fsize, imsize, num, params=None, grad=None, 
-                 inner=TANH_INNER, outer=TANH_OUTER):
+    def __init__(self, fsize, imsize, num, inner=TANH_INNER, outer=TANH_OUTER,
+                **kwargs):
         """
         Construct a MultiConvolutionalFeatureMap.
         
@@ -274,7 +277,7 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
         # Filter size times the number of filters, plus a bias
         filter_elems = np.prod(fsize)
         nparams = filter_elems * num + 1
-        outsize = ConvolutionalPlane._output_from_im_and_filter_size(
+        outsize = ConvolutionalPlane.outsize_from_imsize_and_fsize(
             imsize,
             fsize
         )
@@ -282,16 +285,15 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
             outsize,
             True,
             nparams=nparams,
-            params=params,  # This is a bit of a kludge.
-            grad=grad
+            **kwargs
         )
         self.planes = []
         assert num > 0
         for index in xrange(num):
-            start = 1 + (filter_elems * index)
-            stop = 1 + (filter_elems * (index + 1))
-            thisparam = self.params[start:stop]
-            thisgrad = self._grad[start:stop]
+            param_range = slice(1 + (filter_elems * index), 
+                                1 + (filter_elems * (index + 1)))
+            thisparam = self.params[param_range]
+            thisgrad = self._grad[param_range]
             thisplane = ConvolutionalPlane(fsize, imsize, 
                 params=thisparam,
                 grad=thisgrad,
@@ -329,8 +331,9 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
         # Since the gradient arrays for all of these planes are
         # subarrays of self._grad we don't actually need to return
         # this; just make the method calls.
-        planegrads = [plane.grad(deriv, inp) for plane, inp in
-                      izip(self.planes, inputs)]
+        for plane, inp in izip(self.planes, inputs):
+            # Don't need to save them, just compute them.
+            plane.grad(deriv, inp)
 
         # Compute the bias gradient, which should be stored in
         # self._grad[0]
@@ -367,5 +370,4 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
         for convolved in outputs:
             self._out_array += convolved
         return self._out_array
-    
 
