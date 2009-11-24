@@ -74,14 +74,13 @@ class BaseBPropComponent(object):
     
     def __str__(self):
         """Return a sensible string representation of a bprop module."""
+        aux = ""
         if hasattr(self, 'ratio'):
             ratio = getattr(self, 'ratio')
             aux = " (downsampling @ %s)" % 'x'.join(str(x) for x in ratio)
         elif hasattr(self, 'filter'):
             fsize = getattr(self, 'fsize')
             aux = " (filtering @ %s)" % 'x'.join(str(x) for x in fsize)
-        else:
-            aux = ""
         name = self.__class__.__name__
         resolution = 'x'.join(str(int(x)) for x in self.imsize)
         outsize = 'x'.join(str(int(x)) for x in self.outsize)
