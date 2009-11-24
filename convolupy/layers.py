@@ -7,8 +7,9 @@ from itertools import izip
 import numpy as np
 
 from convolupy.base import BaseBPropComponent
-from convolupy.maps import ConvolutionalFeatureMap, AveragePoolingFeatureMap, \
-        MultiConvolutionalFeatureMap
+
+from convolupy.maps import ConvolutionalFeatureMap, AveragePoolingFeatureMap
+from convolupy.maps import MultiConvolutionalFeatureMap
 
 class AbstractFeatureMapLayer(BaseBPropComponent):
     """Common methods for a bunch of layer classes."""
@@ -116,7 +117,7 @@ class MultiConvolutionalFeatureMapLayer(AbstractFeatureMapLayer):
             **kwargs
         )
         # Make sure the connections list is valid 
-        assert len(connections) == len(nummaps)
+        assert len(connections) == nummaps
         assert all(all(index < nummaps for index in conn)
                    for conn in connections)
         
@@ -125,18 +126,19 @@ class MultiConvolutionalFeatureMapLayer(AbstractFeatureMapLayer):
         lower = upper - numparams
         slices = [slice(start, stop) for start, stop in izip(lower, upper)]
         self.maps = []
+        self._bprop_arrays = [np.zeros(imsize) for index in xrange(nummaps)]
         self.connections = connections
-
+         
         for index in range(nummaps):
             thismap = MultiConvolutionalFeatureMap(
-                fsize, 
+                fsize,
                 imsize,
-                upper[index] - lower[index],
+                len(self.connections[index]),
                 params=self.params[slices[index]],
                 grad=self._grad[slices[index]]
             )
             self.maps.append(thismap)
-
+    
     
     def fprop(self, inputs):
         """Forward propagate input through this module."""
@@ -145,15 +147,31 @@ class MultiConvolutionalFeatureMapLayer(AbstractFeatureMapLayer):
             theseinputs = [inputs[number] for number in self.connections[index]]
             out.append(fmap.fprop(theseinputs))
         return out
-
+    
     def bprop(self, dout, inputs):
         """
         Backpropagate derivatives through this module to get derivatives
         with respect to this module's input.
         """
-        # Oh damn this will be tricky.
-        pass
-
+        for arr in self._bprop_arrays:
+            arr[...] = 0.
+        
+        for index, fmap in enumerate(self.maps):
+            # Grab out the only the input arrays necessary for this map
+            theseinputs = [inputs[number] for number in 
+                           self.connections[index]]
+            
+            # Backpropagate through this feature map
+            bpropped = fmap.bprop(dout[index], theseinputs)
+            
+            # Add the backpropagated derivatives to the running total for 
+            # that input.
+            for conn, bparray in izip(self.connections[index], bpropped):
+                self._bprop_arrays[conn] += bparray
+        
+        # Return the summed backpropagated outputs
+        return self._bprop_arrays
+    
     def grad(self, dout, inputs):
         """
         Gradient of the error with respect to the parameters of this module.
@@ -165,6 +183,8 @@ class MultiConvolutionalFeatureMapLayer(AbstractFeatureMapLayer):
         """
         out = []
         for index, fmap in enumerate(self.maps):
-            theseinputs = [inputs[number] for number in self.connections[index]]
-            out.append(fmap.grad(dout, theseinputs))
+            theseinputs = [inputs[number] for number in
+                           self.connections[index]]
+            out.append(fmap.grad(dout[index], theseinputs))
         return out
+

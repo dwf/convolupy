@@ -1,3 +1,4 @@
+from itertools import izip
 from unittest import TestCase
 
 import numpy as np
@@ -12,7 +13,9 @@ from convolupy.maps import NaiveConvolutionalFeatureMap
 from convolupy.maps import ConvolutionalFeatureMap, AveragePoolingFeatureMap
 from convolupy.maps import MultiConvolutionalFeatureMap
 from convolupy.sigmoids import TanhSigmoid
-
+from convolupy.layers import ConvolutionalFeatureMapLayer
+from convolupy.layers import AveragePoolingFeatureMapLayer
+from convolupy.layers import MultiConvolutionalFeatureMapLayer
 
 def fd_grad(func, x_in, tol=1.0e-5):
     """
@@ -528,4 +531,61 @@ def test_tostring():
             'ConvolutionalFeatureMap 20x20 => 16x16 (filtering @ 5x5)'
     assert str(apfm) == \
             'AveragePoolingFeatureMap 20x20 => 4x4 (downsampling @ 5x5)'
+
+
+# test_multi_convolutional_feature_map_layer_fprop
+
+def test_multi_convolutional_feature_map_layer_fprop_bprop():
+    layer = MultiConvolutionalFeatureMapLayer(
+        (5, 5),
+        (10, 10),
+        4,
+        [[0, 1], [0, 2], [1, 2], [0, 1, 2]]
+    )
+    layer.initialize()
     
+    raw_input = np.empty(10 * 10 * 4)
+    inputs = [raw_input[(100 * index):(100 * (index + 1))].reshape((10, 10)) 
+              for index in xrange(4)]
+    
+    def func(inp):
+        raw_input[...] = inp
+        return np.sum(out.sum() for out in layer.fprop(inputs))
+
+    inp = random.normal(size=10 * 10 * 4)
+    theinputs = [inp[(100 * index):(100 * (index + 1))].reshape((10, 10))
+                 for index in xrange(4)]
+    approx = fd_grad(func, inp)
+    approxout = [approx[(100 * index):(100 * (index + 1))].reshape((10, 10))
+                 for index in xrange(4)]
+    actual = layer.bprop([np.ones((6, 6)) for ind in xrange(4)], theinputs)
+    
+    for thisapprox, thisactual in izip(approxout, actual):
+        assert_array_almost_equal(thisapprox, thisactual)
+
+def test_convolutional_feature_map_layer_grad():
+    layer = MultiConvolutionalFeatureMapLayer(
+        (5, 5),
+        (10, 10),
+        4,
+        [[0, 1], [0, 2], [1, 2], [0, 1, 2]]
+    )
+    layer.initialize()
+    
+    raw_input = random.normal(size=10 * 10 * 4)
+    inputs = [raw_input[(100 * index):(100 * (index + 1))].reshape((10, 10)) 
+              for index in xrange(4)]
+    
+    def func(inp):
+        layer.params[...] = inp
+        return np.sum(out.sum() for out in layer.fprop(inputs))
+
+    params = random.normal(size=len(layer.params))
+
+    layer.params[...] = params
+    layer.grad([np.ones((6, 6)) for index in xrange(4)], inputs)
+
+    approx = fd_grad(func, params)
+
+    assert_array_almost_equal(layer._grad, approx)
+
