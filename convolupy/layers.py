@@ -78,9 +78,10 @@ class AbstractFeatureMapLayer(BaseBPropComponent):
 class ConvolutionalFeatureMapLayer(AbstractFeatureMapLayer):
     """A layer of ConvolutionalFeatureMaps."""
     def __init__(self, fsize, imsize, num, **kwargs):
-        params_per = np.prod(fsize) + 1
+        numparams = self.numparams_required(fsize, imsize, num, **kwargs)
+        params_per = numparams / num
         super(ConvolutionalFeatureMapLayer, self).__init__(
-            nparams=params_per * num,
+            nparams=numparams,
             **kwargs
         )
         self._create_maps(ConvolutionalFeatureMap,
@@ -89,12 +90,17 @@ class ConvolutionalFeatureMapLayer(AbstractFeatureMapLayer):
                           fsize,
                           imsize,
                           **kwargs)
+    
+    @classmethod
+    def numparams_required(cls, fsize, imsize, num, **kwargs):
+        return num * (np.prod(fsize) + 1)
 
 
 class AveragePoolingFeatureMapLayer(AbstractFeatureMapLayer):
     """A layer of AveragePoolingFeatureMaps."""
     def __init__(self, ratio, imsize, num, **kwargs):
-        params_per = 2
+        
+        numparams = self.numparams_required(ratio, imsize, num, **kwargs)
         super(AveragePoolingFeatureMapLayer, self).__init__(
             nparams=params_per * num,
             **kwargs
@@ -105,13 +111,16 @@ class AveragePoolingFeatureMapLayer(AbstractFeatureMapLayer):
                           ratio,
                           imsize,
                           **kwargs)
-
+    @classmethod
+    def numparams_required(cls, ratio, imsize, num, **kwargs):
+        """The number of parameters per map."""
+        return 2 * num
 
 class MultiConvolutionalFeatureMapLayer(AbstractFeatureMapLayer):
     """A layer of MultiConvolutionalFeatureMaps."""
     def __init__(self, fsize, imsize, nummaps, connections, **kwargs):
-        numparams = np.array([np.prod(fsize) * len(conn) + 1
-                              for conn in connections])
+        numparams = self._params_per(fsize, imsize, nummaps, 
+                                    connections, **kwargs)
         super(MultiConvolutionalFeatureMapLayer, self).__init__(
             nparams=np.sum(numparams),
             **kwargs
@@ -139,6 +148,16 @@ class MultiConvolutionalFeatureMapLayer(AbstractFeatureMapLayer):
             )
             self.maps.append(thismap)
     
+    @classmethod
+    def numparams_required(cls, fsize, imsize, nummaps, connections, **kwargs):
+        return np.sum(cls._params_per(fsize, imsize, nummaps, 
+                                     connections, **kwargs))
+    
+    @classmethod
+    def _params_per(cls, fsize, imsize, nummaps, connections, **kwargs):
+        numparams = np.array([np.prod(fsize) * len(conn) + 1
+                              for conn in connections])
+        return numparams
     
     def fprop(self, inputs):
         """Forward propagate input through this module."""
@@ -187,4 +206,5 @@ class MultiConvolutionalFeatureMapLayer(AbstractFeatureMapLayer):
                            self.connections[index]]
             out.append(fmap.grad(dout[index], theseinputs))
         return out
+    
 
