@@ -48,7 +48,7 @@ class ConvolutionalPlane(BaseBPropComponent):
         
         # Parameters for this layer and views onto them
         filter_elems = np.prod(fsize)
-        outsize = self.outsize_from_imsize_and_fsize(imsize, fsize)
+        outsize = self.outsize_from_params(imsize, fsize)
         if bias:
             if biastype == 'map':
                 bias_elems = 1
@@ -73,13 +73,14 @@ class ConvolutionalPlane(BaseBPropComponent):
         
         # Views onto the filter and bias portion of the parameter vector
         self.filter = self.params[:filter_elems].reshape(fsize)
+        
+        # Pad dimensions to match same number as the image size
         self.biases = self.params[filter_elems:].reshape(bias_shape)
         
     def fprop(self, inputs):
         """Forward propagate input through this module."""
         
         # Look ma, no copies!
-        assert len(inputs.shape) == 2
         self._activate(inputs, self._out_array)
         activations = self._out_array[self.active_slice]
         return activations
@@ -90,13 +91,13 @@ class ConvolutionalPlane(BaseBPropComponent):
         with respect to this module's input.
         """
         assert inputs.shape == self._out_array.shape
-        vsize, hsize = self._out_array[self.active_slice].shape
+        vsize, hsize = self._out_array[self.active_slice].shape[-2:]
         out = self._bprop_array
         out[...] = 0.
         for row in xrange(self.filter.shape[0]):
             for col in xrange(self.filter.shape[1]):
                 weight = self.filter[row, col]
-                out[row:(row+vsize), col:(col+hsize)] += dout * weight
+                out[..., row:(row+vsize), col:(col+hsize)] += dout * weight
         return out
     
     def grad(self, dout, inputs):
@@ -108,18 +109,18 @@ class ConvolutionalPlane(BaseBPropComponent):
                 (will be size of input - size of filter + 1, elementwise)
             * inputs -- inputs to this module
         """
-        vsize, hsize = self._out_array[self.active_slice].shape
+        vsize, hsize = self._out_array[self.active_slice].shape[-2:]
         filter_elems = np.prod(self.filter.shape)
         grad_filter = self._grad[:filter_elems].reshape(self.filter.shape)
         grad_biases = self._grad[filter_elems:].reshape(self.biases.shape)
         
         for row in xrange(self.filter.shape[0]):
             for col in xrange(self.filter.shape[1]):
-                cgrad = (dout * inputs[row:(row+vsize),
+                cgrad = (dout * inputs[..., row:(row+vsize),
                     col:(col+hsize)]).sum()
                 grad_filter[row, col] = cgrad
         if len(self.biases.shape) > 1:
-            grad_biases[...] = dout 
+            grad_biases[...] = dout
         else:
             # This is simply a no-op when self.biases.shape = (0,)
             grad_biases[...] = dout.sum()
@@ -130,7 +131,7 @@ class ConvolutionalPlane(BaseBPropComponent):
         """Output size."""
         imsize = self._out_array.shape
         fsize = self.filter.shape
-        return self.outsize_from_imsize_and_fsize(imsize, fsize)
+        return self.outsize_from_params(imsize, fsize)
     
     @property
     def fsize(self):
@@ -151,8 +152,8 @@ class ConvolutionalPlane(BaseBPropComponent):
         imsize = self._out_array.shape
         
         # A slice-tuple representing the 'active' region of the output
-        return (slice(voff, voff + imsize[0] - 2 * voff), 
-            slice(hoff, hoff + imsize[1] - 2 * voff))
+        return (Ellipsis, slice(voff, voff + imsize[-2] - 2 * voff), 
+            slice(hoff, hoff + imsize[-1] - 2 * voff))
     
         
     ########################### Private interface ###########################
@@ -171,10 +172,13 @@ class ConvolutionalPlane(BaseBPropComponent):
         return [np.floor(dim / 2) for dim in fsize]
     
     @classmethod
-    def outsize_from_imsize_and_fsize(cls, imsize, fsize):
+    def outsize_from_params(cls, imsize, fsize):
         """Given image size and filter size, calculate size of the output."""
         offsets = cls._offsets_from_filter_size(fsize)
-        return [size - 2 * off for off, size in izip(offsets, imsize)]
+        offd = [size - 2 * off for off, size in izip(offsets, imsize[-2:])]
+        if len(offd) < len(imsize):
+            offd = list(imsize[:(len(imsize) - len(offd))]) + offd
+        return offd
     
     def initialize(self, multiplier=1, always_add_bias=False):
         """
@@ -201,7 +205,11 @@ class ConvolutionalPlane(BaseBPropComponent):
     def _activate(self, inputs, out, cval=np.nan):
         """Generate input activities for neurons (convolve and add bias)."""
         out[...] = 0.
-        ndimage.correlate(inputs, self.filter, mode='constant', cval=cval, 
+        filter = self.filter
+        while len(filter.shape) != len(inputs.shape):
+            filter = filter[np.newaxis, ...]
+
+        ndimage.correlate(inputs, filter, mode='constant', cval=cval, 
             output=out)
         if self.biases.size > 0:
             out[self.active_slice] += self.biases
@@ -217,13 +225,15 @@ class AveragePoolingPlane(BaseBPropComponent):
         imsize at the given subsampling ratio.
         """
         super(AveragePoolingPlane, self).__init__(*args, **kwargs)
-        if len(ratio) != 2 or len(imsize) != 2:
-            raise ValueError('Both ratio and imsize must be length 2')
-        elif any(dim_i % dim_r != 0 for dim_i, dim_r in izip(imsize, ratio)):
+        if len(ratio) != 2:
+            raise ValueError('ratio must be length 2')
+        # TODO: checks for imsize
+        elif any(dim_i % dim_r != 0 for dim_i, dim_r in izip(imsize[-2:], ratio)):
             raise ValueError('Image dimensions must be divisible by ratios')
         self.ratio = ratio
-        size = [imdim / ratdim for imdim, ratdim in zip(imsize, ratio)]
-        size += imsize[2:]
+        size = [imdim / ratdim for imdim, ratdim in zip(imsize[-2:], ratio)]
+        if len(imsize) > 2:
+            size = imsize[:-2] + size
         self._out_array = np.empty(size)
         self._bprop_array = np.empty(imsize)
     
@@ -234,8 +244,8 @@ class AveragePoolingPlane(BaseBPropComponent):
             for col_start in xrange(self.ratio[1]):
                 row_r = self.ratio[0]
                 col_r = self.ratio[1]
-                self._out_array += inputs[row_start::row_r, 
-                    col_start::col_r, ...]
+                self._out_array += inputs[..., row_start::row_r, 
+                    col_start::col_r]
         self._out_array /= np.prod(self.ratio)
         return self._out_array
     

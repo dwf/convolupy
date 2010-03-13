@@ -277,7 +277,7 @@ class MultiConvolutionalFeatureMap(TanhSigmoid):
         # Filter size times the number of filters, plus a bias
         filter_elems = np.prod(fsize)
         nparams = filter_elems * num + 1
-        outsize = ConvolutionalPlane.outsize_from_imsize_and_fsize(
+        outsize = ConvolutionalPlane.outsize_from_params(
             imsize,
             fsize
         )
